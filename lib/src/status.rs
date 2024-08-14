@@ -1,7 +1,8 @@
 use std::collections::VecDeque;
 use std::io::IsTerminal;
+use std::io::Write;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, Error};
 use camino::Utf8Path;
 use fn_error_context::context;
 use ostree::glib;
@@ -316,18 +317,57 @@ pub(crate) async fn status(opts: super::cli::StatusOpts) -> Result<()> {
     match format {
         OutputFormat::Json => serde_json::to_writer(&mut out, &host).map_err(anyhow::Error::new),
         OutputFormat::Yaml => serde_yaml::to_writer(&mut out, &host).map_err(anyhow::Error::new),
-        OutputFormat::HumanReadable => {
-            if let Some(booted) = host.status.booted {
-                println!("Current deployment image: {:?}", booted.image.unwrap().image.image);
-            } else {
-                println!("Not on a bootc host");
-            }
-            Ok(())
-        }
+        OutputFormat::HumanReadable => human_readable_output(&mut out, &host),  
     }
     .context("Writing to stdout")?;
 
     Ok(())
+}
+
+fn human_readable_output(mut out: impl Write, host: &Host) -> Result<()> {
+    //TODO make this a loop based on &host.status.*
+    if let Some(staged) = &host.status.staged {
+        if let Some(image) = &staged.image {
+            let image_print = format!("Current staged image: {:?}", image.image.image);
+            out.write_all(image_print.as_bytes())?;
+        } else {
+            out.write_all(format!("No image defined").as_bytes())?;
+        }
+    } else {
+        out.write_all(format!("Not on a bootc host").as_bytes())?;
+    }
+    if let Some(booted) = &host.status.booted {
+        if let Some(image) = &booted.image {
+            let image_print = format!("Current deployment image: {:?}", image.image.image);
+            out.write_all(image_print.as_bytes())?;
+        } else {
+            out.write_all(format!("No image defined").as_bytes())?;
+        }
+    } else {
+        out.write_all(format!("Not on a bootc host").as_bytes())?;
+    }
+    if let Some(rollback) = &host.status.rollback {
+        if let Some(image) = &rollback.image {
+            let image_print = format!("Current rollback image: {:?}", image.image.image);
+            out.write_all(image_print.as_bytes())?;
+        } else {
+            out.write_all(format!("No image defined").as_bytes())?;
+        }
+    } else {
+        out.write_all(format!("Not on a bootc host").as_bytes())?;
+    }
+    Ok(())
+}
+
+#[test]
+fn test_human_readable() {
+    const SPEC_FIXTURE: &str = include_str!("fixtures/spec.yaml");
+    let host: Host = serde_yaml::from_str(SPEC_FIXTURE).unwrap();
+    let mut w = Vec::new();
+    human_readable_output(&mut w, &host).unwrap();
+    let w = String::from_utf8(w).unwrap();
+    dbg!(&w);
+    assert!(w.contains("quay.io/example/someimage:latest"));
 }
 
 #[test]
