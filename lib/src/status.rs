@@ -325,42 +325,29 @@ pub(crate) async fn status(opts: super::cli::StatusOpts) -> Result<()> {
 }
 
 fn human_readable_output(mut out: impl Write, host: &Host) -> Result<()> {
-    //TODO make this a loop based on &host.status.*
-    if let Some(staged) = &host.status.staged {
-        if let Some(image) = &staged.image {
-            let image_print = format!("Current staged image: {:?}", image.image.image);
-            out.write_all(image_print.as_bytes())?;
-        } else {
-            out.write_all(format!("No image defined").as_bytes())?;
+    for (print_value, status) in [
+        ("staged", &host.status.staged),
+        ("booted", &host.status.booted),
+        ("rollback", &host.status.rollback),
+    ] {
+        if let Some(host_status) = status {
+            if let Some(image) = &host_status.image {
+                let image_print = format!("Current {print_value} image: {:?}", image.image.image);
+                out.write_all(image_print.as_bytes())?;
+            } else {
+                out.write_all(format!("No image defined").as_bytes())?;
+            }
         }
-    } else {
-        out.write_all(format!("Not on a bootc host").as_bytes())?;
-    }
-    if let Some(booted) = &host.status.booted {
-        if let Some(image) = &booted.image {
-            let image_print = format!("Current deployment image: {:?}", image.image.image);
-            out.write_all(image_print.as_bytes())?;
-        } else {
-            out.write_all(format!("No image defined").as_bytes())?;
+        else {
+            out.write_all(format!("No {print_value} image present").as_bytes())?;
         }
-    } else {
-        out.write_all(format!("Not on a bootc host").as_bytes())?;
-    }
-    if let Some(rollback) = &host.status.rollback {
-        if let Some(image) = &rollback.image {
-            let image_print = format!("Current rollback image: {:?}", image.image.image);
-            out.write_all(image_print.as_bytes())?;
-        } else {
-            out.write_all(format!("No image defined").as_bytes())?;
-        }
-    } else {
-        out.write_all(format!("Not on a bootc host").as_bytes())?;
     }
     Ok(())
 }
 
 #[test]
 fn test_human_readable() {
+    // Tests Staged and Booted, null Rollback
     const SPEC_FIXTURE: &str = include_str!("fixtures/spec.yaml");
     let host: Host = serde_yaml::from_str(SPEC_FIXTURE).unwrap();
     let mut w = Vec::new();
